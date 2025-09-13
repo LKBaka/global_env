@@ -6,7 +6,7 @@ pub fn set_global_env(key: &str, value: &str) -> std::io::Result<()> {
     {
         use winreg::{RegKey, enums::*};
         RegKey::predef(HKEY_CURRENT_USER)
-            .open_subkey("Environment")?
+            .open_subkey_with_flags("Environment", KEY_READ | KEY_WRITE)?
             .set_value(key, &value)?;
 
         // 通知资源管理器环境变量已更改
