@@ -48,3 +48,84 @@ pub fn set_global_env(key: &str, value: &str) -> std::io::Result<()> {
     unsafe { env::set_var(key, value) };
     Ok(())
 }
+
+/// 获取全局环境变量（包括注册表中的）
+pub fn get_global_env(key: &str) -> Option<String> {
+    // 先尝试当前进程
+    if let Ok(val) = env::var(key) {
+        return Some(val);
+    }
+
+    #[cfg(windows)]
+    {
+        use winreg::{RegKey, enums::*};
+        
+        // 尝试用户环境变量
+        if let Ok(env_key) = RegKey::predef(HKEY_CURRENT_USER)
+            .open_subkey("Environment") 
+        {
+            if let Ok(val) = env_key.get_value(key) {
+                return Some(val);
+            }
+        }
+        
+        // 尝试系统环境变量
+        if let Ok(env_key) = RegKey::predef(HKEY_LOCAL_MACHINE)
+            .open_subkey(r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment") 
+        {
+            if let Ok(val) = env_key.get_value(key) {
+                return Some(val);
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    get_global_env_unix();
+
+    None
+}
+
+#[cfg(unix)]
+fn get_shell_config_file(shell: &str) -> String {
+    match shell {
+        "bash" => ".bashrc".to_string(),
+        "zsh" => ".zshrc".to_string(),
+        "fish" => ".config/fish/config.fish".to_string(),
+        "ksh" => ".kshrc".to_string(),
+        "tcsh" => ".tcshrc".to_string(),
+        "csh" => ".cshrc".to_string(),
+        _ => ".profile".to_string(), // 默认使用.profile
+    }
+}
+
+/// 获取全局环境变量（包括配置文件中的）
+#[cfg(unix)]
+pub fn get_global_env_unix(key: &str) -> Option<String> {
+    // 先尝试当前进程
+    if let Ok(val) = env::var(key) {
+        return Some(val);
+    }
+
+    // 尝试从配置文件中读取
+    let shell = detect_shell().unwrap_or_else(|| "bash".to_string());
+    let config_file = get_shell_config_file(&shell);
+
+    if let Some(home) = env::var_os("HOME") {
+        use std::path::Path;
+        let mut path = Path::new(&home).to_path_buf();
+        path.push(&config_file);
+        
+        if let Ok(content) = std::fs::read_to_string(&path) {
+            let pattern = format!("export {}=", key);
+            for line in content.lines() {
+                if line.starts_with(&pattern) {
+                    if let Some(value) = line.splitn(2, '=').nth(1) {
+                        return Some(value.trim_matches('"').to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
