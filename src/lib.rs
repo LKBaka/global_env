@@ -80,7 +80,7 @@ pub fn get_global_env(key: &str) -> Option<String> {
     }
 
     #[cfg(unix)]
-    get_global_env_unix();
+    get_global_env_unix(key);
 
     None
 }
@@ -98,8 +98,8 @@ fn get_shell_config_file(shell: &str) -> String {
     }
 }
 
-/// 获取全局环境变量（包括配置文件中的）
 #[cfg(unix)]
+/// 获取全局环境变量（包括配置文件中的）
 pub fn get_global_env_unix(key: &str) -> Option<String> {
     // 先尝试当前进程
     if let Ok(val) = env::var(key) {
@@ -107,7 +107,7 @@ pub fn get_global_env_unix(key: &str) -> Option<String> {
     }
 
     // 尝试从配置文件中读取
-    let shell = detect_shell().unwrap_or_else(|| "bash".to_string());
+    let shell = env::var("SHELL").unwrap_or_else(|_| "bash".to_string());
     let config_file = get_shell_config_file(&shell);
 
     if let Some(home) = env::var_os("HOME") {
